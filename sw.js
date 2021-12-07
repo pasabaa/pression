@@ -1,70 +1,99 @@
-//Asignar nombre y versión a la cache
-const CACHE_NAME = "v1_pwa_moduloencuestas";
-//Archivos para la cache (no acepta carpetas)
-var urlsToCache = [
+// imports
+importScripts('js/sw-utils.js');
+
+
+const STATIC_CACHE = 'static-v1';
+const DYNAMIC_CACHE = 'dynamic-v1';
+const INMUTABLE_CACHE = 'inmutable-v1';
+
+
+const APP_SHELL = [
+    // '/',
     './',
     './css/style.css',
     './js/app.js',
-    './img/favicon/favicon.ico',
+    './js/sw-utils.js',
+    './img/android-chrome-192x192.png',
+    './img/android-chrome-256x256.png',
+    './img/apple-touch-icon.png',
     './img/favicon-16x16.png',
     './img/favicon-32x32.png',
-
+    './img/favicon.ico',
+    './img/mstile-150x150.png',
+    './img/safari-pinned-tab.svg',
+    './img/browserconfig.xml'
 ];
 
-/*-----------EVENTOS-------------*/
-//install: instalar el service worker y guardar en cache recursos estáticos
-self.addEventListener('install', e =>{
-    e.waitUntil(
-        caches.open(CACHE_NAME)
-            .then( cache => {
-                return cache.addAll(urlsToCache)
-                    .then( () => {
-                        console.log("Instalación completa en cache");
-                        self.skipWaiting();
-                    })
-            })
-            .catch( err => {
-                console.log("No se pudo registrar la cache", err);
-            })
-    );
+const APP_SHELL_INMUTABLE = [
+    'https://cdn.jsdelivr.net/npm/bootstrap@5.0.2/dist/css/bootstrap.min.css',
+    'https://cdn.jsdelivr.net/npm/bootstrap-icons@1.7.2/font/bootstrap-icons.css',
+    'https://cdn.jsdelivr.net/npm/bootstrap@5.0.2/dist/js/bootstrap.bundle.min.js'
+];
+
+
+
+self.addEventListener('install', e => {
+
+
+    const cacheStatic = caches.open(STATIC_CACHE).then(cache =>
+        cache.addAll(APP_SHELL));
+
+    const cacheInmutable = caches.open(INMUTABLE_CACHE).then(cache =>
+        cache.addAll(APP_SHELL_INMUTABLE));
+
+
+
+    e.waitUntil(Promise.all([cacheStatic, cacheInmutable]));
+
 });
 
 
-
-//activate: ayuda a que la app pueda funcionar sin conexión
 self.addEventListener('activate', e => {
-    const cacheWhitelist = [CACHE_NAME];
-    e.waitUntil(
-        caches.keys()
-            .then( cacheNames => {
-                return Promise.all(
-                    cacheNames.map(cacheName => {
-                        if( cacheWhitelist.indexOf(cacheName) === -1 ){
-                            console.log("Activado correctamente");
-                            return caches.delete( cacheName );
-                        }
-                    })
-                )
-            })
-            .then( () => {
-                self.clients.claim(); //activar cache en todos los clientes
-            })
-    )
+
+    const respuesta = caches.keys().then(keys => {
+
+        keys.forEach(key => {
+
+            if (key !== STATIC_CACHE && key.includes('static')) {
+                return caches.delete(key);
+            }
+
+            if (key !== DYNAMIC_CACHE && key.includes('dynamic')) {
+                return caches.delete(key);
+            }
+
+        });
+
+    });
+
+    e.waitUntil(respuesta);
+
 });
 
-//fetch
+
+
+
 self.addEventListener('fetch', e => {
-    e.respondWith(
-        caches.match( e.request )
-            .then( resp => {
-                if(resp){
-                    return resp;
-                }
-                return fetch( e.request );
-            })
-    );
-});
 
-self.addEventListener('error', function(e) {
-    console.log(e.filename, e.lineno, e.colno, e.message);
-  });
+
+    const respuesta = caches.match(e.request).then(res => {
+
+        if (res) {
+            return res;
+        } else {
+
+            return fetch(e.request).then(newRes => {
+
+                return actualizaCacheDinamico(DYNAMIC_CACHE, e.request, newRes);
+
+            });
+
+        }
+
+    });
+
+
+
+    e.respondWith(respuesta);
+
+});
